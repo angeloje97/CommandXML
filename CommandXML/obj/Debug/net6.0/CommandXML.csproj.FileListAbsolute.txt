@@ -1,0 +1,15 @@
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\bin\Debug\net6.0\CommandXML.exe
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\bin\Debug\net6.0\CommandXML.deps.json
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\bin\Debug\net6.0\CommandXML.runtimeconfig.json
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\bin\Debug\net6.0\CommandXML.dll
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\bin\Debug\net6.0\CommandXML.pdb
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.csproj.AssemblyReference.cache
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.GeneratedMSBuildEditorConfig.editorconfig
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.AssemblyInfoInputs.cache
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.AssemblyInfo.cs
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.csproj.CoreCompileInputs.cache
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.dll
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\refint\CommandXML.dll
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.pdb
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\CommandXML.genruntimeconfig.cache
+C:\WorkSpace\Porgramming\Work Environment\CommandXML\CommandXML\obj\Debug\net6.0\ref\CommandXML.dll
