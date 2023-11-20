@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
@@ -11,9 +12,9 @@ namespace CommandXML
     public class CommandItem
     {
         public string description;
-        public Action action;
+        public Action<XmlElement> action;
 
-        public CommandItem(string description, Action action)
+        public CommandItem(string description, Action<XmlElement> action)
         {
             this.description = description;
             this.action = action;
@@ -29,51 +30,71 @@ namespace CommandXML
         public static bool reading;
 
 
-        public static void Initiate()
+        List<string> commandLogs;
+        readonly int maxLogs = 25;
+        readonly string emptyLog = "|                                                                            |";
+        XmlDocument doc;
+
+
+        public static async void Initiate()
         {
             if (instance != null) return;
             instance = new();
 
 
-            instance.ReadData();
+            await instance.ReadData();
+            instance.CleanUp();
         }
 
         public CommandController()
         {
-            XmlDocument currentDoc = new XmlDocument();
-            var root = currentDoc.CreateElement("CommandController");
-            var commandElement = currentDoc.CreateElement("Command");
+            doc = new XmlDocument();
+            var root = doc.CreateElement("CommandXML");
 
-            //Create Comments
-            root.AppendChild(currentDoc.CreateComment("List of Commands"));
-            foreach(KeyValuePair<string, CommandItem> command in commands)
+            commandLogs = new();
+
+            doc.AppendChild(root);
+
+
+            CreateConsole();
+            CreateControls();
+
+            SaveDoc();
+
+            void CreateConsole()
             {
-                root.AppendChild(currentDoc.CreateComment($"{command.Key}: {command.Value.description}"));
+                var console = doc.CreateElement("Console");
+
+                for (int i = 0; i < maxLogs; i++)
+                {
+                    console.AppendChild(doc.CreateComment(emptyLog));
+                }
+
+                root.AppendChild(console);
+
             }
 
-
-            root.AppendChild(commandElement);
-            currentDoc.AppendChild(root);
-
-
-            XmlWriterSettings settings = new XmlWriterSettings
+            void CreateControls()
             {
-                OmitXmlDeclaration = true,
-                Indent = true,
-                NewLineChars = "\r\n",
-            };
-
-            XmlWriter writer = XmlWriter.Create(Path.Combine(path, "output.xml"), settings);
+                var commandElement = doc.CreateElement("Command");
+                var controls = doc.CreateElement("Controls");
 
 
-            currentDoc.Save(writer);
-            currentDoc.Save(Path.Combine(path, fileName));
+                root.AppendChild(controls);
+                controls.AppendChild(commandElement);
+                commandElement.SetAttribute("name", "");
+
+                controls.AppendChild(doc.CreateComment("List of Commands"));
+                foreach (KeyValuePair<string, CommandItem> command in commands)
+                {
+                    controls.AppendChild(doc.CreateComment($"{command.Key}: {command.Value.description}"));
+                }
+            }
         }
 
-        public async void ReadData()
+        async Task  ReadData()
         {
             reading = true;
-            var doc = new XmlDocument();
 
             while (reading)
             {
@@ -84,54 +105,106 @@ namespace CommandXML
                 var commandNodes = doc.GetElementsByTagName("Command");
                 if (commandNodes.Count == 0) continue;
 
+                bool hasInvoked = false;
+
                 foreach(XmlElement commandNode in commandNodes)
                 {
                     var commandSent = commandNode.GetAttribute("name");
-                    Console.WriteLine($"Inner text of the <Command> element: {commandSent}");
-                    Console.WriteLine(commandSent); 
-                    HandleCommand(commandSent);
+                    if (commandSent.Equals("")) continue;
+                    hasInvoked = true;
+                    HandleCommand(commandNode);
 
                 }
 
-                ClearCommands();
+                if (hasInvoked)
+                {
+                    UpdateConsole();
+                    ClearCommands();
+                    SaveDoc();
+                }
                 
             }
 
             reading = false;
         }
 
-        public void HandleCommand(string commandString)
+        public void HandleCommand(XmlElement element)
         {
-            if (!commands.ContainsKey(commandString)) return;
-            Console.WriteLine("Running Command");
-            commands[commandString].action();
+            var commandString = element.GetAttribute("name");
+            if (!commands.ContainsKey(commandString)) {
+                WriteLine($"Unknown Command: {commandString}");
+                return;
+            };
+
+            WriteLine($"Running Command: {commandString}");
+            commands[commandString].action(element);
+        }
+
+        public void WriteLine(string str)
+        {
+            commandLogs.Add(str);
         }
 
         public void ClearCommands() 
         {
-            var doc = new XmlDocument();
-            doc.Load(Path.Combine(path, fileName));
-
             var dataNodes = doc.GetElementsByTagName("Command");
             
             foreach(XmlElement element in dataNodes)
             {
                 element.SetAttribute("name", "");
             }
+        }
 
+        void UpdateConsole()
+        {
+            var consoles = doc.GetElementsByTagName("Console");
+
+            foreach(XmlElement console in consoles)
+            {
+                console.RemoveAll();
+
+                int leftOvers = maxLogs;
+                for (int i = commandLogs.Count - 1; i >= 0; i--)
+                {
+                    var log = commandLogs[i];
+                    console.AppendChild(doc.CreateComment(log));
+
+                    leftOvers--;
+                }
+
+                while (leftOvers > 0)
+                {
+                    console.AppendChild(doc.CreateComment(emptyLog));
+
+                    leftOvers--;
+                }
+            }
+
+            
+
+        }
+
+        public void SaveDoc()
+        {
             doc.Save(Path.Combine(path, fileName));
+        }
+
+        public void CleanUp()
+        {
+            if (!File.Exists(Path.Combine(path, fileName))) return;
+            File.Delete(Path.Combine(path, fileName));
         }
 
         public static readonly Dictionary<string, CommandItem> commands = new() {
             { "SayHello", new(
                     "Prints Hello World",
-                    () => {
+                    (element) => {
                         Console.WriteLine("Hello World");
                     }
                 ) },
             { "End", new(
                     "Prints, ends the console",
-                    () => {
+                    (element) => {
                         reading = false;
                     }
                 ) }
