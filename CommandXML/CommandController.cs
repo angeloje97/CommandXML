@@ -19,6 +19,12 @@ namespace CommandXML
             this.description = description;
             this.action = action;
         }
+
+        public CommandItem(string description, Action action)
+        {
+            this.description = description;
+            this.action += (element) => { action(); };
+        }
     }
     internal class CommandController
     {
@@ -209,5 +215,18 @@ namespace CommandXML
                     }
                 ) }
         };
+
+        public bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
+        {
+            foreach(XmlAttribute attribute in elementWithAttributes)
+            {
+                if (pairs.ContainsKey(attribute.Name))
+                {
+
+                }
+            }
+
+            return true;
+        }
     }
 }
