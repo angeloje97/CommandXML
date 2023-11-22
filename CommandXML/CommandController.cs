@@ -12,7 +12,10 @@ namespace CommandXML
     public class CommandItem
     {
         public string description;
-        public Action<XmlElement> action;
+        Action<XmlElement> action;
+        public Action? cleanUp;
+
+        bool enabledCleanUp;
 
         public CommandItem(string description, Action<XmlElement> action)
         {
@@ -25,10 +28,23 @@ namespace CommandXML
             this.description = description;
             this.action += (element) => { action(); };
         }
+
+        public void Invoke(XmlElement element)
+        {
+            if (!enabledCleanUp)
+            {
+                enabledCleanUp = true;
+                CommandController.instance.OnCleanUp += () => {
+                    cleanUp?.Invoke();
+                };
+            }
+
+            action?.Invoke(element);
+        }
     }
     internal class CommandController
     {
-        static CommandController instance;
+        public static CommandController instance;
 
         static readonly string path = "C:\\WorkSpace\\Porgramming\\Sandbox";
         static readonly string fileName = "Commands.xml";
@@ -39,25 +55,31 @@ namespace CommandXML
         List<string> commandLogs;
         readonly int maxLogs = 25;
         readonly string emptyLog = "|                                                                            |";
-        XmlDocument doc;
+
+        public Action? OnCleanUp;
 
 
-        public static async void Initiate()
+        public static void Initiate()
         {
             if (instance != null) return;
-            instance = new();
+            instance = new CommandController();
 
 
-            await instance.ReadData();
+            instance.ReadData();
             instance.CleanUp();
         }
 
         public CommandController()
         {
-            doc = new XmlDocument();
+            commandLogs = new List<string>();
+            CreateNewXMLDoc();
+        }
+
+        void CreateNewXMLDoc()
+        {
+            var doc = new XmlDocument();
             var root = doc.CreateElement("CommandXML");
 
-            commandLogs = new();
 
             doc.AppendChild(root);
 
@@ -65,19 +87,14 @@ namespace CommandXML
             CreateConsole();
             CreateControls();
 
-            SaveDoc();
+            doc.Save(Path.Combine(path, fileName));
 
             void CreateConsole()
             {
                 var console = doc.CreateElement("Console");
 
-                for (int i = 0; i < maxLogs; i++)
-                {
-                    console.AppendChild(doc.CreateComment(emptyLog));
-                }
-
                 root.AppendChild(console);
-
+                UpdateConsole(doc);
             }
 
             void CreateControls()
@@ -98,15 +115,27 @@ namespace CommandXML
             }
         }
 
-        async Task  ReadData()
+        void ReadData()
         {
             reading = true;
 
             while (reading)
             {
 
-                await Task.Delay(1000);
-                doc.Load(Path.Combine(path, fileName));
+                Thread.Sleep(1000);
+                var doc = new XmlDocument();
+
+
+                try
+                {
+                    doc.Load(Path.Combine(path, fileName));
+
+                }
+                catch (Exception)
+                {
+                    CreateNewXMLDoc();
+                    doc.Load(Path.Combine(path, fileName));
+                }
 
                 var commandNodes = doc.GetElementsByTagName("Command");
                 if (commandNodes.Count == 0) continue;
@@ -124,9 +153,9 @@ namespace CommandXML
 
                 if (hasInvoked)
                 {
-                    UpdateConsole();
-                    ClearCommands();
-                    SaveDoc();
+                    UpdateConsole(doc);
+                    ClearCommands(doc);
+                    doc.Save(Path.Combine(path, fileName));
                 }
                 
             }
@@ -143,7 +172,7 @@ namespace CommandXML
             };
 
             WriteLine($"Running Command: {commandString}");
-            commands[commandString].action(element);
+            commands[commandString].Invoke(element);
         }
 
         public void WriteLine(string str)
@@ -151,7 +180,7 @@ namespace CommandXML
             commandLogs.Add(str);
         }
 
-        public void ClearCommands() 
+        public void ClearCommands(XmlDocument doc) 
         {
             var dataNodes = doc.GetElementsByTagName("Command");
             
@@ -161,7 +190,7 @@ namespace CommandXML
             }
         }
 
-        void UpdateConsole()
+        void UpdateConsole(XmlDocument doc)
         {
             var consoles = doc.GetElementsByTagName("Console");
 
@@ -170,7 +199,9 @@ namespace CommandXML
                 console.RemoveAll();
 
                 int leftOvers = maxLogs;
-                for (int i = commandLogs.Count - 1; i >= 0; i--)
+                var end = commandLogs.Count < maxLogs ? 0 : commandLogs.Count - maxLogs;
+
+                for (int i = commandLogs.Count - 1; i >= end; i--)
                 {
                     var log = commandLogs[i];
                     console.AppendChild(doc.CreateComment(log));
@@ -185,40 +216,17 @@ namespace CommandXML
                     leftOvers--;
                 }
             }
-
-            
-
-        }
-
-        public void SaveDoc()
-        {
-            doc.Save(Path.Combine(path, fileName));
         }
 
         public void CleanUp()
         {
+            OnCleanUp?.Invoke();
             if (!File.Exists(Path.Combine(path, fileName))) return;
             File.Delete(Path.Combine(path, fileName));
         }
-
-        public static readonly Dictionary<string, CommandItem> commands = new() {
-            { "SayHello", new(
-                    "Prints Hello World",
-                    (element) => {
-                        Console.WriteLine("Hello World");
-                    }
-                ) },
-            { "End", new(
-                    "Prints, ends the console",
-                    (element) => {
-                        reading = false;
-                    }
-                ) }
-        };
-
         public bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
         {
-            foreach(XmlAttribute attribute in elementWithAttributes)
+            foreach (XmlAttribute attribute in elementWithAttributes)
             {
                 if (pairs.ContainsKey(attribute.Name))
                 {
@@ -228,5 +236,22 @@ namespace CommandXML
 
             return true;
         }
+
+        public static readonly Dictionary<string, CommandItem> commands = new() {
+            { "SayHello", new CommandItem(
+                    "Prints Hello World",
+                    (element) => {
+                        Console.WriteLine("Hello World");
+                    }
+                ) },
+            { "End", new CommandItem(
+                    "Prints, ends the console",
+                    (element) => {
+                        reading = false;
+                    }
+                ) }
+        };
+
+        
     }
 }
