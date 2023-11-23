@@ -144,19 +144,7 @@ namespace CommandXML
             {
 
                 Thread.Sleep(1000);
-                var doc = new XmlDocument();
-
-
-                try
-                {
-                    doc.Load(Path.Combine(path, fileName));
-
-                }
-                catch (Exception)
-                {
-                    CreateNewXMLDoc();
-                    doc.Load(Path.Combine(path, fileName));
-                }
+                var doc = CurrentDoc();
 
                 var commandNodes = doc.GetElementsByTagName("Command");
                 if (commandNodes.Count == 0) continue;
@@ -197,8 +185,19 @@ namespace CommandXML
 
             OnRunCommand?.Invoke(command);
             runningCommand = true;
-            command.Invoke(element);
+
+            try
+            {
+                command.Invoke(element);
+
+            }catch(Exception e)
+            {
+                Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
+            }
+
             runningCommand = false;
+
+            WriteLine($"Finished Running Command: {commandString}");
 
             Thread.Sleep(1000);
         }
@@ -206,6 +205,9 @@ namespace CommandXML
         public void WriteLine(string str)
         {
             commandLogs.Add(str);
+            var doc = CurrentDoc();
+            UpdateConsole(doc);
+            doc.Save(Path.Combine(path, fileName));
         }
 
         public void ClearCommands(XmlDocument doc) 
@@ -224,18 +226,17 @@ namespace CommandXML
 
             foreach(XmlElement console in consoles)
             {
-                console.RemoveAll();
 
-                int leftOvers = maxLogs;
-                var end = commandLogs.Count < maxLogs ? 0 : commandLogs.Count - maxLogs;
-
-                for (int i = commandLogs.Count - 1; i >= end; i--)
+                while (console.HasChildNodes)
                 {
-                    var log = commandLogs[i];
-                    console.AppendChild(doc.CreateComment(log));
-
-                    leftOvers--;
+                    console.RemoveChild(console.FirstChild);
                 }
+
+                var exceedsMaxLogs = commandLogs.Count > maxLogs;
+                var start = exceedsMaxLogs ? commandLogs.Count - maxLogs : 0;
+                var leftOvers = maxLogs - (commandLogs.Count - start);
+
+                Console.WriteLine($"There are {maxLogs} - {commandLogs.Count - start} empty logs");
 
                 while (leftOvers > 0)
                 {
@@ -243,6 +244,30 @@ namespace CommandXML
 
                     leftOvers--;
                 }
+
+                for (int i = start; i < commandLogs.Count; i++)
+                {
+                    var log = commandLogs[i];
+                    console.AppendChild(doc.CreateComment(log));
+
+                    leftOvers--;
+                }
+            }
+        }
+
+        XmlDocument CurrentDoc()
+        {
+            var doc = new XmlDocument();
+            try
+            {
+                doc.Load(Path.Combine(path, fileName));
+                return doc;
+            }
+            catch(Exception)
+            {
+                CreateNewXMLDoc();
+                doc.Load(Path.Combine(path, fileName));
+                return doc;
             }
         }
 
@@ -272,12 +297,20 @@ namespace CommandXML
                         Console.WriteLine("Hello World");
                     }
                 ) },
+            { "LongTask", new CommandItem(() => {
+                Console.WriteLine("Running Long Task");
+                Thread.Sleep(10000);
+            })},
+            { "ThrowError", new CommandItem(() => {
+                throw new Exception();
+            }) },
             { "End", new CommandItem(
                     "Prints, ends the console",
                     (element) => {
                         reading = false;
                     }
-                ) }
+                ) },
+            
         };
 
         
