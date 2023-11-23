@@ -13,7 +13,7 @@ namespace CommandXML
     {
         public string description;
         Action<XmlElement> action;
-        public Action? cleanUp;
+        public Action cleanUp;
 
         bool enabledCleanUp;
 
@@ -29,12 +29,22 @@ namespace CommandXML
             this.action += (element) => { action(); };
         }
 
+        public CommandItem(Action action)
+        {
+            this.action += (element) => { action(); };
+        }
+
+        public CommandItem(Action<XmlElement> action)
+        {
+            this.action = action;
+        }
+
         public void Invoke(XmlElement element)
         {
             if (!enabledCleanUp)
             {
                 enabledCleanUp = true;
-                CommandController.instance.OnCleanUp += () => {
+                CommandController.OnCleanUp += () => {
                     cleanUp?.Invoke();
                 };
             }
@@ -50,13 +60,15 @@ namespace CommandXML
         static readonly string fileName = "Commands.xml";
 
         public static bool reading;
+        public static bool runningCommand;
 
 
         List<string> commandLogs;
         readonly int maxLogs = 25;
         readonly string emptyLog = "|                                                                            |";
 
-        public Action? OnCleanUp;
+        public static Action OnCleanUp;
+        public static Action<CommandItem> OnRunCommand;
 
 
         public static void Initiate()
@@ -67,6 +79,15 @@ namespace CommandXML
 
             instance.ReadData();
             instance.CleanUp();
+        }
+
+        public static void Initiate(Dictionary<string, CommandItem> extraCommands)
+        {
+            foreach(KeyValuePair<string, CommandItem> pair in extraCommands)
+            {
+                if (commands.ContainsKey(pair.Key)) continue;
+                commands.Add(pair.Key, pair.Value);
+            }
         }
 
         public CommandController()
@@ -172,7 +193,14 @@ namespace CommandXML
             };
 
             WriteLine($"Running Command: {commandString}");
-            commands[commandString].Invoke(element);
+            var command = commands[commandString];
+
+            OnRunCommand?.Invoke(command);
+            runningCommand = true;
+            command.Invoke(element);
+            runningCommand = false;
+
+            Thread.Sleep(1000);
         }
 
         public void WriteLine(string str)
@@ -237,7 +265,7 @@ namespace CommandXML
             return true;
         }
 
-        public static readonly Dictionary<string, CommandItem> commands = new() {
+        static Dictionary<string, CommandItem> commands = new Dictionary<string, CommandItem> {
             { "SayHello", new CommandItem(
                     "Prints Hello World",
                     (element) => {
