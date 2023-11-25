@@ -66,6 +66,7 @@ namespace CommandXML
         List<string> commandLogs;
         readonly int maxLogs = 25;
         readonly string emptyLog = "|                                                                            |";
+        string currentStatus = "idle";
 
         public static Action OnCleanUp;
         public static Action<CommandItem> OnRunCommand;
@@ -80,7 +81,6 @@ namespace CommandXML
             instance.ReadData();
             instance.CleanUp();
         }
-
         public static void Initiate(Dictionary<string, CommandItem> extraCommands)
         {
             foreach(KeyValuePair<string, CommandItem> pair in extraCommands)
@@ -89,13 +89,11 @@ namespace CommandXML
                 commands.Add(pair.Key, pair.Value);
             }
         }
-
         public CommandController()
         {
             commandLogs = new List<string>();
             CreateNewXMLDoc();
         }
-
         void CreateNewXMLDoc()
         {
             var doc = new XmlDocument();
@@ -106,6 +104,7 @@ namespace CommandXML
 
 
             CreateConsole();
+            CreateStatus();
             CreateControls();
 
             doc.Save(Path.Combine(path, fileName));
@@ -134,8 +133,15 @@ namespace CommandXML
                     controls.AppendChild(doc.CreateComment($"{command.Key}: {command.Value.description}"));
                 }
             }
-        }
 
+            void CreateStatus()
+            {
+                var statusElement = doc.CreateElement("Status");
+                statusElement.SetAttribute("current", currentStatus);
+
+                root.AppendChild(statusElement);
+            }
+        }
         void ReadData()
         {
             reading = true;
@@ -156,7 +162,7 @@ namespace CommandXML
                     var commandSent = commandNode.GetAttribute("name");
                     if (commandSent.Equals("")) continue;
                     hasInvoked = true;
-                    HandleCommand(commandNode);
+                    HandleCommand(commandNode, doc);
 
                 }
 
@@ -164,6 +170,7 @@ namespace CommandXML
                 {
                     UpdateConsole(doc);
                     ClearCommands(doc);
+                    UpdateStatus("Idle", doc);
                     doc.Save(Path.Combine(path, fileName));
                 }
                 
@@ -171,8 +178,7 @@ namespace CommandXML
 
             reading = false;
         }
-
-        public void HandleCommand(XmlElement element)
+        public void HandleCommand(XmlElement element, XmlDocument document)
         {
             var commandString = element.GetAttribute("name");
             if (!commands.ContainsKey(commandString)) {
@@ -180,11 +186,14 @@ namespace CommandXML
                 return;
             };
 
-            WriteLine($"Running Command: {commandString}");
+
+            WriteLine($"Running Command: {commandString}", document);
             var command = commands[commandString];
 
             OnRunCommand?.Invoke(command);
             runningCommand = true;
+            UpdateStatus($"Running Command {commandString}", document);
+            document.Save(Path.Combine(path, fileName));
 
             try
             {
@@ -192,34 +201,65 @@ namespace CommandXML
 
             }catch(Exception e)
             {
+                WriteLine($"Error when running command: {commandString}", document);
                 Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
             }
 
             runningCommand = false;
-
-            WriteLine($"Finished Running Command: {commandString}");
+            UpdateStatus($"Finish Running {commandString}",document);
+            WriteLine($"Finished Running Command: {commandString}", document);
+            document.Save(Path.Combine(path, fileName));
 
             Thread.Sleep(1000);
         }
-
-        public void WriteLine(string str)
+        public void WriteLine(string str, XmlDocument? doc = null)
         {
             commandLogs.Add(str);
-            var doc = CurrentDoc();
-            UpdateConsole(doc);
-            doc.Save(Path.Combine(path, fileName));
-        }
+            bool save = doc == null;
+            if (doc == null) doc = CurrentDoc();
 
+            UpdateConsole(doc);
+
+            if (save)
+            {
+                doc.Save(Path.Combine(path, fileName));
+            }
+
+        }
         public void ClearCommands(XmlDocument doc) 
         {
-            var dataNodes = doc.GetElementsByTagName("Command");
+            XmlNodeList dataNodes = doc.GetElementsByTagName("Command");
             
-            foreach(XmlElement element in dataNodes)
+
+
+            for (int i = 0; i < dataNodes.Count; i++)
             {
-                element.SetAttribute("name", "");
+                var node = dataNodes[i];
+
+                if (node != null)
+                {
+                    var parentNode = node.ParentNode;
+
+                    if (parentNode != null && i != 0)
+                    {
+                        parentNode.RemoveChild(node);
+                        continue;
+                    }
+
+                    if (node.Attributes != null)
+                    {
+                        node.Attributes.RemoveAll();
+                    }
+
+                    if(node is XmlElement element)
+                    {
+                        element.SetAttribute("name", "");
+                    }
+                }
+
+
             }
         }
-
         void UpdateConsole(XmlDocument doc)
         {
             var consoles = doc.GetElementsByTagName("Console");
@@ -235,8 +275,6 @@ namespace CommandXML
                 var exceedsMaxLogs = commandLogs.Count > maxLogs;
                 var start = exceedsMaxLogs ? commandLogs.Count - maxLogs : 0;
                 var leftOvers = maxLogs - (commandLogs.Count - start);
-
-                Console.WriteLine($"There are {maxLogs} - {commandLogs.Count - start} empty logs");
 
                 while (leftOvers > 0)
                 {
@@ -254,7 +292,18 @@ namespace CommandXML
                 }
             }
         }
+        
+        void UpdateStatus(string current, XmlDocument doc)
+        {
+            var statuses = doc.GetElementsByTagName("Status");
+            currentStatus = current;
 
+            foreach(XmlElement element in statuses)
+            {
+                element.SetAttribute("current", currentStatus);
+                return;
+            }
+        }
         XmlDocument CurrentDoc()
         {
             var doc = new XmlDocument();
@@ -270,7 +319,6 @@ namespace CommandXML
                 return doc;
             }
         }
-
         public void CleanUp()
         {
             OnCleanUp?.Invoke();
@@ -312,7 +360,5 @@ namespace CommandXML
                 ) },
             
         };
-
-        
     }
 }
