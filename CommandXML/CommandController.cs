@@ -11,6 +11,7 @@ namespace CommandXML
 
     public class CommandItem
     {
+        public string commandName;
         public string description;
         Action<XmlElement> action;
         public Action cleanUp;
@@ -39,25 +40,36 @@ namespace CommandXML
             this.action = action;
         }
 
+        public override string ToString()
+        {
+            return commandName;
+        }
+
         public void Invoke(XmlElement element)
         {
             if (!enabledCleanUp)
             {
                 enabledCleanUp = true;
-                CommandController.OnCleanUp += () => {
-                    cleanUp?.Invoke();
-                };
+                if(cleanUp != null)
+                {
+                    CommandController.instance.cleanUpCommandItems.Add(this);
+                }
             }
 
             action?.Invoke(element);
+        }
+
+        public void InvokeCleanUp()
+        {
+            cleanUp?.Invoke();
         }
     }
     internal class CommandController
     {
         public static CommandController instance;
 
-        static readonly string path = "C:\\WorkSpace\\Porgramming\\Sandbox";
-        static readonly string fileName = "Commands.xml";
+        public static string path = "C:\\WorkSpace\\Porgramming\\Sandbox";
+        public static string fileName = "Commands.xml";
 
         public static bool reading;
         public static bool runningCommand;
@@ -68,18 +80,26 @@ namespace CommandXML
         readonly string emptyLog = "|                                                                            |";
         string currentStatus = "idle";
 
-        public static Action OnCleanUp;
-        public static Action<CommandItem> OnRunCommand;
-
+        public List<CommandItem> cleanUpCommandItems;
+        public Action<CommandItem> OnRunCommand;
+        
 
         public static void Initiate()
         {
             if (instance != null) return;
             instance = new CommandController();
-
+            UpdateCommandNames();
 
             instance.ReadData();
             instance.CleanUp();
+        }
+
+        static void UpdateCommandNames()
+        {
+            foreach(KeyValuePair<string, CommandItem> pairs in commands)
+            {
+                pairs.Value.commandName = pairs.Key;
+            }
         }
         public static void Initiate(Dictionary<string, CommandItem> extraCommands)
         {
@@ -92,6 +112,7 @@ namespace CommandXML
         public CommandController()
         {
             commandLogs = new List<string>();
+            cleanUpCommandItems = new();
             CreateNewXMLDoc();
         }
         void CreateNewXMLDoc()
@@ -187,12 +208,12 @@ namespace CommandXML
             };
 
 
-            WriteLine($"Running Command: {commandString}", document);
             var command = commands[commandString];
+            WriteLine($"Running Command: {command}", document);
 
             OnRunCommand?.Invoke(command);
             runningCommand = true;
-            UpdateStatus($"Running Command {commandString}", document);
+            UpdateStatus($"Running Command {command}", document);
             document.Save(Path.Combine(path, fileName));
 
             try
@@ -321,9 +342,27 @@ namespace CommandXML
         }
         public void CleanUp()
         {
-            OnCleanUp?.Invoke();
-            if (!File.Exists(Path.Combine(path, fileName))) return;
-            File.Delete(Path.Combine(path, fileName));
+            var doc = CurrentDoc();
+
+            UpdateStatus("Running cleanup functions", doc);
+            doc.Save(Path.Combine(path, fileName));
+
+            foreach(var commandItem in cleanUpCommandItems)
+            {
+                WriteLine($"Running cleanup function from command: {commandItem}");
+                try
+                {
+                    commandItem.InvokeCleanUp();
+                }catch(Exception e)
+                {
+                    WriteLine($"Could not execute cleanup function for command: {commandItem} check console");
+                    Console.WriteLine($"Error for cleanup function for command: {commandItem}\n{e.StackTrace}");
+                }
+                WriteLine($"Finished running cleanup function from command: {commandItem}");
+            }
+
+            //if (!File.Exists(Path.Combine(path, fileName))) return;
+            //File.Delete(Path.Combine(path, fileName));
         }
         public bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
         {
@@ -339,25 +378,39 @@ namespace CommandXML
         }
 
         static Dictionary<string, CommandItem> commands = new Dictionary<string, CommandItem> {
+            //Say Hello Command
             { "SayHello", new CommandItem(
                     "Prints Hello World",
                     (element) => {
                         Console.WriteLine("Hello World");
                     }
                 ) },
+
+            //Long Task Command
             { "LongTask", new CommandItem(() => {
                 Console.WriteLine("Running Long Task");
                 Thread.Sleep(10000);
-            })},
+            }) { cleanUp = () => {
+                Console.WriteLine("Running cleanup");
+                Thread.Sleep(5000);
+            } } },
+
+            //Throw Error Command
             { "ThrowError", new CommandItem(() => {
                 throw new Exception();
-            }) },
+            })
+            {cleanUp = () => {
+                throw new Exception();
+            } }
+            },
+
+            //End Reading Command
             { "End", new CommandItem(
                     "Prints, ends the console",
                     (element) => {
                         reading = false;
                     }
-                ) },
+                )},
             
         };
     }
