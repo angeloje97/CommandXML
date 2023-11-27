@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -112,7 +115,7 @@ namespace CommandXML
         public CommandController()
         {
             commandLogs = new List<string>();
-            cleanUpCommandItems = new();
+            cleanUpCommandItems = new List<CommandItem>();
             CreateNewXMLDoc();
         }
         void CreateNewXMLDoc()
@@ -364,17 +367,35 @@ namespace CommandXML
             //if (!File.Exists(Path.Combine(path, fileName))) return;
             //File.Delete(Path.Combine(path, fileName));
         }
-        public bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
+        public static bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
         {
-            foreach (XmlAttribute attribute in elementWithAttributes)
+            bool valid = true;
+            var invalidReason = new StringBuilder();
+            foreach (KeyValuePair<string, Type> pair in pairs)
             {
-                if (pairs.ContainsKey(attribute.Name))
+                try
                 {
+                    var converter = TypeDescriptor.GetConverter(pair.Value);
+                    if (!elementWithAttributes.HasAttribute(pair.Key)) {
+                        throw new Exception($"Element does not have attribute: {pair.Key}");
+                    };
+                    var attributeValue = elementWithAttributes.GetAttribute(pair.Key);
+                    var result = converter.ConvertFromString(attributeValue);
 
+                }
+                catch(Exception e)
+                {
+                    valid = false;
+                    invalidReason.Append($"Can't convert attribute <{pair.Key}> to <{pair.Value}>\n");
                 }
             }
 
-            return true;
+            if (!valid)
+            {
+                instance.WriteLine($"Could not validate value types: \n{invalidReason}");
+            }
+
+            return valid;
         }
 
         static Dictionary<string, CommandItem> commands = new Dictionary<string, CommandItem> {
@@ -403,6 +424,18 @@ namespace CommandXML
                 throw new Exception();
             } }
             },
+
+            //Test Validate
+            { "TestValidate", new CommandItem(
+                "alias: string, age: int",
+                (element)=>{
+                var validated = Validate(element, new Dictionary<string, Type>(){
+                    { "alias", typeof(string) },
+                    { "age", typeof(int) },
+                });
+
+                Console.WriteLine($"TestValidate is valid: {validated}");
+            }) },
 
             //End Reading Command
             { "End", new CommandItem(
