@@ -17,6 +17,7 @@ namespace CommandXML
         public string commandName;
         public string description;
         Action<XmlElement> action;
+        public Dictionary<string, Type> validAttributes;
         public Action cleanUp;
 
         bool enabledCleanUp;
@@ -152,9 +153,34 @@ namespace CommandXML
                 commandElement.SetAttribute("name", "");
 
                 controls.AppendChild(doc.CreateComment("List of Commands"));
+
                 foreach (KeyValuePair<string, CommandItem> command in commands)
                 {
-                    controls.AppendChild(doc.CreateComment($"{command.Key}: {command.Value.description}"));
+                    var stringBuilder = new StringBuilder();
+
+                    stringBuilder.Append($"Command:<{command.Key}>");
+
+                    if (command.Value.validAttributes != null)
+                    {
+                        var stringList = new List<string>();
+                        stringBuilder.Append(" Required Attributes: (");
+                        foreach(KeyValuePair<string, Type> pair in command.Value.validAttributes)
+                        {
+                            stringList.Add($"{pair.Key}: {pair.Value}");
+                        }
+
+                        stringBuilder.Append(string.Join(", ", stringList));
+                        stringBuilder.Append(")");
+                    }
+
+                    var description = command.Value.description;
+                    if (!string.IsNullOrEmpty(description))
+                    {
+                        stringBuilder.Append($": {command.Value.description}");
+
+                    }
+
+                    controls.AppendChild(doc.CreateComment(stringBuilder.ToString()));
                 }
             }
 
@@ -212,6 +238,15 @@ namespace CommandXML
 
 
             var command = commands[commandString];
+
+            if(command.validAttributes != null)
+            {
+                if (!ValidateAttributes(element, command.validAttributes))
+                {
+                    return;
+                }
+            }
+
             WriteLine($"Running Command: {command}", document);
 
             OnRunCommand?.Invoke(command);
@@ -367,7 +402,7 @@ namespace CommandXML
             //if (!File.Exists(Path.Combine(path, fileName))) return;
             //File.Delete(Path.Combine(path, fileName));
         }
-        public static bool Validate(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
+        bool ValidateAttributes(XmlElement elementWithAttributes, Dictionary<string, Type> pairs)
         {
             bool valid = true;
             var invalidReason = new StringBuilder();
@@ -427,19 +462,23 @@ namespace CommandXML
 
             //Test Validate
             { "TestValidate", new CommandItem(
-                "alias: string, age: int",
                 (element)=>{
-                var validated = Validate(element, new Dictionary<string, Type>(){
-                    { "alias", typeof(string) },
-                    { "age", typeof(int) },
-                });
 
-                Console.WriteLine($"TestValidate is valid: {validated}");
-            }) },
+                    var alias = element.GetAttribute("alias");
+                    var age = int.Parse(element.GetAttribute("age"));
+
+                    Console.WriteLine($"{alias}({age})");
+                
+            }) {
+                validAttributes = new Dictionary<string, Type>()
+                {
+                    { "alias", typeof(string) },
+                    { "age", typeof(int) }
+                }
+            } },
 
             //End Reading Command
             { "End", new CommandItem(
-                    "Prints, ends the console",
                     (element) => {
                         reading = false;
                     }
