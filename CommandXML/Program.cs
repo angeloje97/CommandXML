@@ -4,6 +4,14 @@ using CommandXML;
 Console.WriteLine("Hello, World!");
 
 
-CommandController.Initiate();
+var count = 5;
 
-while (CommandController.reading) await Task.Delay(1000);
+for(int i = 0; i < count; i = (i + 1) % count)
+{
+    Console.WriteLine(i);
+    Thread.Sleep(1000);
+}
+
+//CommandController.Initiate();
+
+//while (CommandController.reading) await Task.Delay(1000);

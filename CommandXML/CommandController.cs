@@ -86,6 +86,7 @@ namespace CommandXML
 
         public List<CommandItem> cleanUpCommandItems;
         public Action<CommandItem> OnRunCommand;
+        public Action<CommandItem, Exception> OnError;
         
 
         public static void Initiate()
@@ -112,6 +113,8 @@ namespace CommandXML
                 if (commands.ContainsKey(pair.Key)) continue;
                 commands.Add(pair.Key, pair.Value);
             }
+
+            Initiate();
         }
         public CommandController()
         {
@@ -262,6 +265,7 @@ namespace CommandXML
             {
                 WriteLine($"Error when running command: {commandString}", document);
                 Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
+                OnError?.Invoke(command, e);
             }
 
             runningCommand = false;
