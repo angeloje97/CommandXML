@@ -6,12 +6,12 @@ Console.WriteLine("Hello, World!");
 
 var count = 5;
 
-for(int i = 0; i < count; i = (i + 1) % count)
-{
-    Console.WriteLine(i);
-    Thread.Sleep(1000);
-}
+//for(int i = 0; i < count; i = (i + 1) % count)
+//{
+//    Console.WriteLine(i);
+//    Thread.Sleep(1000);
+//}
 
-//CommandController.Initiate();
+CommandController.Initiate();
 
 //while (CommandController.reading) await Task.Delay(1000);

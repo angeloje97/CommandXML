@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Net.WebSockets;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -77,6 +78,7 @@ namespace CommandXML
 
         public static bool reading;
         public static bool runningCommand;
+        public static bool runInBackground;
 
 
         List<string> commandLogs;
@@ -87,7 +89,7 @@ namespace CommandXML
         public List<CommandItem> cleanUpCommandItems;
         public Action<CommandItem> OnRunCommand;
         public Action<CommandItem, Exception> OnError;
-        
+
 
         public static void Initiate()
         {
@@ -95,8 +97,20 @@ namespace CommandXML
             instance = new CommandController();
             UpdateCommandNames();
 
-            instance.ReadData();
-            instance.CleanUp();
+            if (runInBackground)
+            {
+                Task.Run(() => {
+                    instance.ReadData();
+                    instance.CleanUp();
+                });
+            }
+            else
+            {
+                instance.ReadData();
+                instance.CleanUp();
+
+            }
+
         }
 
         static void UpdateCommandNames()
@@ -116,6 +130,7 @@ namespace CommandXML
 
             Initiate();
         }
+
         public CommandController()
         {
             commandLogs = new List<string>();
@@ -215,7 +230,7 @@ namespace CommandXML
                     var commandSent = commandNode.GetAttribute("name");
                     if (commandSent.Equals("")) continue;
                     hasInvoked = true;
-                    HandleCommand(commandNode, doc);
+                    ReadCommand(commandNode, doc);
 
                 }
 
@@ -231,7 +246,7 @@ namespace CommandXML
 
             reading = false;
         }
-        public void HandleCommand(XmlElement element, XmlDocument document)
+        public void ReadCommand(XmlElement element, XmlDocument document)
         {
             var commandString = element.GetAttribute("name");
             if (!commands.ContainsKey(commandString)) {
@@ -250,37 +265,70 @@ namespace CommandXML
                 }
             }
 
-            WriteLine($"Running Command: {command}", document);
+            var isTask = CheckRunTask(element);
 
-            OnRunCommand?.Invoke(command);
-            runningCommand = true;
-            UpdateStatus($"Running Command {command}", document);
-            document.Save(Path.Combine(path, fileName));
-
-            try
+            if (isTask)
             {
-                command.Invoke(element);
 
-            }catch(Exception e)
+                Task.Run(() => {
+                    ProcessCommand($"Starting Command TASK: {command}", $"Finish Running TASK {commandString}" , false);
+                });
+            }
+            else
             {
-                WriteLine($"Error when running command: {commandString}", document);
-                Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
-                OnError?.Invoke(command, e);
+                ProcessCommand($"Starting Command {command}", $"Finished Command {command}");
             }
 
-            runningCommand = false;
-            UpdateStatus($"Finish Running {commandString}",document);
-            WriteLine($"Finished Running Command: {commandString}", document);
-            document.Save(Path.Combine(path, fileName));
+            
+
 
             Thread.Sleep(1000);
+
+            void ProcessCommand(string startString, string endString, bool updateStatus = true)
+            {
+
+
+                OnRunCommand?.Invoke(command);
+                runningCommand = true;
+
+
+
+                if (updateStatus)
+                {
+                    UpdateStatus($"Running Command {command}", document);
+                }
+
+                WriteLine(startString);
+
+
+                try
+                {
+                    command.Invoke(element);
+
+                }
+                catch (Exception e)
+                {
+                    WriteLine($"Error when running command: {commandString}", document);
+                    Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
+                    OnError?.Invoke(command, e);
+                }
+
+                runningCommand = false;
+                if (updateStatus)
+                {
+                    UpdateStatus($"Finish Running {commandString}", document);
+                }
+
+                WriteLine(endString);
+            }
+
         }
         public void WriteLine(string str, XmlDocument? doc = null)
         {
             commandLogs.Add(str);
             bool save = doc == null;
             if (doc == null) doc = CurrentDoc();
-
+            Console.WriteLine(str);
             UpdateConsole(doc);
 
             if (save)
@@ -353,6 +401,17 @@ namespace CommandXML
 
                     leftOvers--;
                 }
+            }
+        }
+
+        bool CheckRunTask(XmlElement element)
+        {
+            try
+            {
+                return bool.Parse(element.GetAttribute("task"));
+            }catch
+            {
+                return false;
             }
         }
         
