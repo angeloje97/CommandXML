@@ -108,9 +108,7 @@ namespace CommandXML
             {
                 instance.ReadData();
                 instance.CleanUp();
-
             }
-
         }
 
         static void UpdateCommandNames()
@@ -130,7 +128,6 @@ namespace CommandXML
 
             Initiate();
         }
-
         public CommandController()
         {
             commandLogs = new List<string>();
@@ -194,7 +191,7 @@ namespace CommandXML
                     var description = command.Value.description;
                     if (!string.IsNullOrEmpty(description))
                     {
-                        stringBuilder.Append($": {command.Value.description}");
+                        stringBuilder.Append($": Summary: {command.Value.description}");
 
                     }
 
@@ -254,7 +251,6 @@ namespace CommandXML
                 return;
             };
 
-
             var command = commands[commandString];
 
             if(command.validAttributes != null)
@@ -269,7 +265,6 @@ namespace CommandXML
 
             if (isTask)
             {
-
                 Task.Run(() => {
                     ProcessCommand($"Starting Command TASK: {command}", $"Finish Running TASK {commandString}" , false);
                 });
@@ -323,7 +318,7 @@ namespace CommandXML
             }
 
         }
-        public void WriteLine(string str, XmlDocument? doc = null)
+        public void WriteLine(string str, XmlDocument doc = null)
         {
             commandLogs.Add(str);
             bool save = doc == null;
