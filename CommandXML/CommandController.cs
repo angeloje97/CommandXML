@@ -9,6 +9,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace CommandXML
 {
@@ -22,6 +23,8 @@ namespace CommandXML
         public Action cleanUp;
 
         bool enabledCleanUp;
+
+        bool running;
 
         public CommandItem(string description, Action<XmlElement> action)
         {
@@ -50,8 +53,10 @@ namespace CommandXML
             return commandName;
         }
 
-        public void Invoke(XmlElement element)
+        public void Invoke(XmlElement element, Action<Exception> OnError = null)
         {
+
+
             if (!enabledCleanUp)
             {
                 enabledCleanUp = true;
@@ -61,12 +66,41 @@ namespace CommandXML
                 }
             }
 
-            action?.Invoke(element);
+            running = true;
+
+            try
+            {
+                action?.Invoke(element);
+
+            }
+            catch (Exception e)
+            {
+                OnError?.Invoke(e);
+                
+            }
+
+            running = false;
+
+            WaitTilDone();
         }
 
-        public void InvokeCleanUp()
+        public void InvokeCleanUp(Action<Exception> OnError = null)
         {
-            cleanUp?.Invoke();
+            try
+            {
+                cleanUp?.Invoke();
+
+            }
+            catch(Exception e)
+            {
+                OnError?.Invoke(e);
+            }
+        }
+
+        public void WaitTilDone()
+        {
+            Thread.Sleep(1000);
+            while (running) Thread.Sleep(250);
         }
     }
     internal class CommandController
@@ -86,9 +120,9 @@ namespace CommandXML
         readonly string emptyLog = "|                                                                            |";
         string currentStatus = "idle";
 
-        public List<CommandItem> cleanUpCommandItems;
-        public Action<CommandItem> OnRunCommand;
-        public Action<CommandItem, Exception> OnError;
+        public List<CommandItem> cleanUpCommandItems { get; set; }
+        public Action<CommandItem> OnRunCommand { get; set; }
+        public Action<CommandItem, Exception> OnError { get; set; }
 
 
         public static void Initiate()
@@ -134,6 +168,22 @@ namespace CommandXML
             cleanUpCommandItems = new List<CommandItem>();
             CreateNewXMLDoc();
         }
+        XmlDocument CurrentDoc()
+        {
+            var doc = new XmlDocument();
+            try
+            {
+                doc.Load(Path.Combine(path, fileName));
+                return doc;
+            }
+            catch (Exception)
+            {
+                CreateNewXMLDoc();
+                doc.Load(Path.Combine(path, fileName));
+                return doc;
+            }
+        }
+
         void CreateNewXMLDoc()
         {
             var doc = new XmlDocument();
@@ -283,10 +333,8 @@ namespace CommandXML
             {
 
 
-                OnRunCommand?.Invoke(command);
                 runningCommand = true;
-
-
+                OnRunCommand?.Invoke(command);
 
                 if (updateStatus)
                 {
@@ -295,18 +343,13 @@ namespace CommandXML
 
                 WriteLine(startString);
 
-
-                try
-                {
-                    command.Invoke(element);
-
-                }
-                catch (Exception e)
-                {
-                    WriteLine($"Error when running command: {commandString}", document);
-                    Console.WriteLine($"Error when running command: {commandString}. \nStackTrace: {e.StackTrace}");
+                command.Invoke(element, (Exception e) => {
+                    WriteLine($"Error when running command: {this}", document);
+                    Console.WriteLine($"Error when running command: {this}. \nStackTrace: {e.StackTrace}");
+                    Console.WriteLine($"Message: {e.Message}");
                     OnError?.Invoke(command, e);
-                }
+                });
+
 
                 runningCommand = false;
                 if (updateStatus)
@@ -421,21 +464,6 @@ namespace CommandXML
                 return;
             }
         }
-        XmlDocument CurrentDoc()
-        {
-            var doc = new XmlDocument();
-            try
-            {
-                doc.Load(Path.Combine(path, fileName));
-                return doc;
-            }
-            catch(Exception)
-            {
-                CreateNewXMLDoc();
-                doc.Load(Path.Combine(path, fileName));
-                return doc;
-            }
-        }
         public void CleanUp()
         {
             var doc = CurrentDoc();
@@ -446,14 +474,12 @@ namespace CommandXML
             foreach(var commandItem in cleanUpCommandItems)
             {
                 WriteLine($"Running cleanup function from command: {commandItem}");
-                try
-                {
-                    commandItem.InvokeCleanUp();
-                }catch(Exception e)
-                {
+
+                commandItem.InvokeCleanUp((Exception e) => {
                     WriteLine($"Could not execute cleanup function for command: {commandItem} check console");
                     Console.WriteLine($"Error for cleanup function for command: {commandItem}\n{e.StackTrace}");
-                }
+                    Console.Write($"Message: {e.Message}");
+                });
                 WriteLine($"Finished running cleanup function from command: {commandItem}");
             }
 
