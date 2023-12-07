@@ -113,7 +113,7 @@ namespace CommandXML
         public static bool reading;
         public static bool runningCommand;
         public static bool runInBackground;
-
+        bool stop;
 
         List<string> commandLogs;
         readonly int maxLogs = 25;
@@ -152,8 +152,9 @@ namespace CommandXML
                 pairs.Value.commandName = pairs.Key;
             }
         }
-        public static void Initiate(Dictionary<string, CommandItem> extraCommands)
+        public static void Initiate(Dictionary<string, CommandItem> extraCommands, bool cleanCommands = false)
         {
+            commands = new Dictionary<string, CommandItem>();
             foreach(KeyValuePair<string, CommandItem> pair in extraCommands)
             {
                 if (commands.ContainsKey(pair.Key)) continue;
@@ -263,7 +264,7 @@ namespace CommandXML
 
             while (reading)
             {
-
+                if (stop) break;
                 Thread.Sleep(1000);
                 var doc = CurrentDoc();
 
@@ -440,6 +441,21 @@ namespace CommandXML
                     leftOvers--;
                 }
             }
+        }
+
+        public void WaitUntilReadingFinished()
+        {
+            while (reading)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+
+        public void StopReading()
+        {
+            stop = true;
+
+            WaitUntilReadingFinished();
         }
 
         bool CheckRunTask(XmlElement element)
